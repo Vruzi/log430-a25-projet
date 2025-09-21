@@ -1,0 +1,11 @@
+@startuml
+  node MachineVirtuelle {
+    node Conteneur {
+      component "store_manager.py" 
+      database "MySQL"
+      database "MongoDB"
+      "store_manager.py" <--> "MySQL"
+      "store_manager.py" <--> "MongoDB"
+    }
+  }
+@enduml

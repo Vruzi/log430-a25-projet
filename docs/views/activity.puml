@@ -1,0 +1,21 @@
+@startuml
+    start
+    :Voir le menu principal;
+        repeat
+            if (Sélectionner : Montrer la liste d'utilisateurs) then (oui)
+                :Voir la liste d'utilisateurs;
+            elseif (Sélectionner : Ajouter un utilisateur) then (oui) 
+                :Remplir formulaire d'utilisateur;
+                :Ajouter le nouveau utilisateur;
+            elseif (Sélectionner : Montrer la liste d'articles) then (oui)
+                :Voir la liste d'articles;
+            elseif (Sélectionner : Ajouter un article) then (oui) 
+                :Remplir formulaire d'article;
+                :Ajouter le nouveau article;
+            else (non)
+                :Quitter l'appli;
+                stop
+            endif
+        repeat while (Continuer dans l'appli?) is (oui) not (non)
+    stop
+@enduml

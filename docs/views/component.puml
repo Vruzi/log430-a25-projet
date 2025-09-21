@@ -1,0 +1,24 @@
+@startuml
+package View {
+    [UserView] 
+}
+
+package Controller {
+    [UserController] 
+}
+
+package Model {
+    [User] 
+}
+
+package DAO {
+    [UserDAO] 
+}
+
+[UserView] --> [UserController] : Demander la création d'un utilisateur
+[UserController] --> [UserDAO] : Valider, demander à la DAO
+[UserDAO] --> [User] : Obtenir la liste d'attributs d'un utilisateur
+[User] --> [UserDAO] : Créer un utilisateur
+[UserDAO] --> [UserController] : Notifier le Controller
+[UserController] --> [UserView] : Mettre à jour la View 
+@enduml

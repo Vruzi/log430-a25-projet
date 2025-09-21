@@ -1,0 +1,6 @@
+@startuml
+    Utilisateur.trice --> (Voir la liste d'utilisateurs)
+    Utilisateur.trice --> (Ajouter un utilisateur)
+    Utilisateur.trice --> (Voir la liste d'articles)
+    Utilisateur.trice --> (Ajouter un article)
+@enduml

@@ -1,0 +1,65 @@
+@startuml
+    class User {
+        + id: int
+        + name: string
+        + email: string
+    }
+
+    class UserDAO {
+        + select_all(): User[]
+        + insert(User): int
+        + update(User): void
+        + delete(int): void
+        + delete_all(): void
+        + close(): void
+    }
+
+    class UserController {
+        + list_users():User[]
+        + create_user(): void
+        + shutdown(): void
+    }
+
+    class UserView {
+        + show_users(User[]): void
+        + get_inputs(): void
+    }
+
+    class Product {
+        + id: int
+        + name: string
+        + brand: string
+        + price: float
+    }
+
+    class ProductDAO {
+        + select_all(): User[]
+        + insert(User): int
+        + update(User): void
+        + delete(int): void
+        + delete_all(): void
+        + close(): void
+    }
+
+    class ProductController {
+        + list_products():Product[]
+        + create_product(): void
+        + shutdown(): void
+    }
+
+    class ProductView {
+        + show_products(Product[]): void
+        + get_inputs(): void
+    }
+
+    UserDAO --> User
+    UserController --> UserDAO
+    UserController --> UserView
+    UserController --> User
+
+    ProductDAO --> Product
+    ProductController --> ProductDAO
+    ProductController --> ProductView
+    ProductController --> Product
+    
+@enduml
