@@ -1,40 +1,46 @@
 services:
-  store_manager_app:
-    build: .
-    container_name: store_manager_app
+  db:
+    image: postgres:16
+    container_name: brokerx-postgres
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
     volumes:
-      - .:/app
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  backend:
+    build: ./brokerx/server
+    container_name: brokerx-backend
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.PostgreSQLDialect
+    ports:
+      - "8080:8080"
     depends_on:
-      - mysql
-      - mongo
-    stdin_open: true
-    tty: true  
+      db:
+        condition: service_healthy
 
-  mysql:
-    image: mysql:8
-    container_name: mysql
-    restart: unless-stopped
+  frontend:
+    build: ./brokerx/frontend
+    container_name: brokerx-client
     ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: mydb
-      MYSQL_USER: user
-      MYSQL_PASSWORD: pass
-    volumes:
-      - ./db-init:/docker-entrypoint-initdb.d
-
-  mongo:
-    image: mongo:6
-    container_name: mongo
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: user
-      MONGO_INITDB_ROOT_PASSWORD: pass
-    volumes:
-      - mongo-data:/data/db
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
-  mongo-data:
+  db_data:

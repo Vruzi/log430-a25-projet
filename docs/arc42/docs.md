@@ -1,99 +1,181 @@
-# Store Manager L01 - Documentation d'Architecture
-Ce document, basé sur le modèle arc42, décrit une application de gestion de magasin pour le Labo 01, LOG430.
+# BrokerX - Documentation d'Architecture
+Ce document, basé sur le modèle arc42, décrit l’architecture de **BrokerX**, une application de courtage éducative (LOG430).
+
+---
 
 ## 1. Introduction et Objectifs
 
 ### Panorama des exigences
-L'application « Store Manager » est un système client-serveur pour la gestion des utilisateurs et des articles dans un petit magasin. Elle sert de projet éducatif pour démontrer :
-- L'implémentation d'une architecture client-serveur
-- Le patron MVC avec DAO (Data Access Object)
-- Le support multi-bases de données (MySQL et MongoDB)
-- La comparaison des avantages et des inconvénients entre une base de données relationnelle (MySQL) et NoSQL (MongoDB)
-
-Nous ferons évoluer ce projet tout au long du cours LOG430, en intégrant de nouvelles fonctionnalités et en faisant évoluer notre architecture pour répondre aux nouvelles exigences.
+**BrokerX** est un système **client–serveur** implémenté comme un **monolithe modulaire** suivant un **service-based architecture style interne** (UI → API → components → DB).  
+Il illustre :
+- Une séparation nette **front (React/TypeScript)** / **back (Java Spring Boot 3)**.
+- Une **API REST** contractuelle (DTO) exposant les cas d’utilisation.
+- Une **persistence relationnelle** avec **PostgreSQL** (migrations **Flyway**).
+- Des qualités visées : **latence** et **disponibilité** via **couche de cache**, **débit** via **Resilience4j** + pagination + index, **observabilité** minimale (sprint ultérieur).
 
 ### Objectifs qualité
 | Priorité | Objectif qualité | Scénario |
-|----------|------------------|----------|
-| 1 | **Maintenabilité** | Séparation claire des responsabilités via le patron MVC+DAO |
-| 2 | **Flexibilité** | Support de multiples backends de base de données (MySQL, MongoDB) |
-| 3 | **Évolutivité** | Plusieurs clients peuvent se connecter au même serveur de base de données |
+|---|---|---|
+| 1 | **Latence** | P95 `GET /api/portfolio/positions` < **50 ms** en dev grâce au cache + pré-agrégation |
+| 2 | **Débit (rate)** | Supporter **10 req/s** sur `POST /api/orders` sans doublons (idempotence `clientOrderId`) |
+| 3 | **Disponibilité** | En cas d’indispo MarketData simulée, afficher le **dernier snapshot** + bannière d’avertissement |
+| 4 | **Observabilité (Sprint 2)** | Chaque requête porte un **traceId** dans les logs ; `/actuator/health` exposé |
 
 ### Parties prenantes (Stakeholders)
-- **Développeur.euse** : Apprendre/enseigner l'architecture client-serveur et les patrons MVC+DAO
-- **Employé.es du magasin** : Utilisateur.trices gérant les articles et utilisateurs dans l'application 
-- **Client.es du magasin** : Client.es servis par l'application (par exemple, en demandant à un.e employé.e à la caisse de rechercher la disponibilité ou le prix d'un article spécifique)
+- **Équipe étudiante** : conception, implémentation, démonstration.
+- **Enseignant·e / correcteur·trice** : validation des décisions, traçabilité.
+- **Investisseurs (fictifs)** : utilisateurs finaux simulés (comptes, ordres, positions).
 
-## 2. Contraintes d'architecture
+---
+
+## 2. Contraintes d’architecture
 
 | Contrainte | Description |
-|------------|-------------|
-| **Technologie** | Utilisation de Python 3, MySQL, MongoDB et Docker |
-| **Déploiement** | Déploiement en conteneur Docker unique pour la simplicité |
-| **Éducatif** | L'application doit démontrer clairement l'architecture client-serveur, la séparation MVC+DAO et la comparaison entre MySQL et MongoDB |
+|---|---|
+| **Style** | **Client/serveur** en **monolithe modulaire** (service-based interne) |
+| **Technologies** | **React + TypeScript** (client), **Java 21 + Spring Boot 3** (serveur), **PostgreSQL** |
+| **Sécurité** | Sessions **cookies HttpOnly**, **A2F TOTP** (MFA), CORS maîtrisé |
+| **Déploiement** | **Docker** (Postgres, Redis pour cache, serveur Spring Boot) |
+| **CI/CD** | Pipelines séparés `client/` et `server/`, **Flyway** pour les migrations |
+| **Hors-périmètre** | Pas de microservices ; pas de serveur JS/TS (pas de Next.js SSR) ; pas de NoSQL pour le cœur métier |
+
+---
 
 ## 3. Portée et contexte du système
 
 ### Contexte métier
-![Activity](activity.png)
-
-Le système permet aux employé.es du magasin de :
-- Gérer les comptes utilisateurs, qui peuvent être des employé.es du magasin ou des client.es
-- Gérer les articles vendus par le magasin
+- **Ordres & exécutions** : réception, validation pré-trade, routage et exécution simulée.
+- **Portefeuilles & règlements (EOD)** : positions agrégées, snapshots quotidiens, rapports.
+- **Conformité & surveillance** : contrôles pré-trade (pouvoir d’achat, restrictions), détection post-trade simple.
+- **Observabilité & audit** : logs avec `traceId`, métriques de base, **journal d’audit** append-only.
 
 ### Contexte technique
-- **Client** : `store_manager.py` - Application Python CLI
-- **Couche base de données** : Backends MySQL/MongoDB pouvant fonctionner ensemble ou de manière interchangeable
-- **Communication** : Connexions directes entre l'application Python et les bases de données (pas de couche API HTTP)
+- **Client** : SPA **React/TS** → **API REST** HTTP/JSON.
+- **Serveur** : **Spring Boot 3** (controllers → services → repositories/DAO).
+- **Base de données** : **PostgreSQL** (transactions ACID, index, vues/agrégations).
+- **Cache** : **Redis** (lectures rapides positions/portefeuille, TTL court).
+
+---
 
 ## 4. Stratégie de solution
 
 | Problème | Approche de solution |
-|----------|---------------------|
-| **Séparation interface** | Patron MVC avec classes Model, View et Controller dédiées |
-| **Abstraction base de données** | Patron DAO pour abstraire les opérations de base de données |
-| **Support multi-BD** | Implémentations DAO séparées pour MySQL et MongoDB |
+|---|---|
+| Séparation UI/serveur | **API REST** + **DTO** (contrat stable, data minces) |
+| Cohérence & audit | **PostgreSQL** (ACID) + table **audit_log** append-only |
+| Latence | **Cache** Redis lecture + **pré-agrégations** (positions) + DTO minces |
+| Débit | **Pagination**, **index SQL**, **HikariCP**, **Resilience4j** (rate-limit, timeouts, retry, circuit-breaker) |
+| Disponibilité | **Monolithe** simple + **cache** ; modes dégradés (snapshot si source indispo) |
+| Sécurité | Sessions **HttpOnly**, **A2F TOTP**, RBAC simple ; validation `@Valid` |
+| Extensibilité | **Service-based interne** (components), interfaces (ports) entre components |
+
+---
 
 ## 5. Vue des blocs de construction
-![Class](class.png)
-![Component](component.png)
 
-## 6. Vue d'exécution
-![Use Case](use_case.png)
+> Découpage logique en **components internes** au monolithe (ownership de tables par composant).
+
+- `api/` : contrôleurs REST, validation, mapping DTO.
+- `orders/` : use cases d’ordres, machine à états, idempotence (`clientOrderId` unique).
+- `portfolio/` : transactions/exécutions → positions agrégées, snapshots EOD, rapports.
+- `compliance/` : règles pré-trade synchrones, surveillance post-trade asynchrone.
+- `audit/` : `audit_log` append-only (+ option chaînage hash).
+- `security/` : login, **A2F TOTP**, sessions, CORS.
+
+**Règles internes**
+- **Ownership** : un composant = ses repositories/DAO = ses tables.
+- **Ports** : appels inter-components via interfaces (pas d’accès direct aux repos d’un autre composant).
+- **DTO** à la frontière API uniquement ; entités JPA internes.
+
+---
+
+## 6. Vue d’exécution
+
+**Flux “Placer un ordre (idempotent)”**
+1. `POST /api/orders` (DTO) → `OrderService.placeOrder()`
+2. **Compliance pré-trade** (synchrone) ; si OK : état `VALIDATED`
+3. Persistance (`orders`, contrainte d’unicité `client_order_id`)
+4. Routage/exécution **asynchrones** (scheduler léger)
+5. Écritures `executions` + `transactions` ; **invalidation cache** positions utilisateur
+6. `GET /api/portfolio/positions` → lecture **cache** (ou DB si miss), DTO réponse
+
+---
 
 ## 7. Vue de déploiement
-![Deployment](deployment.png)
+
+- **Monorepo**
+    brokerx/
+    ├─ client/ (React + TS)
+    └─ server/ (Spring Boot 3)
+
+- **Docker compose** : `postgres`, `redis`, `server` (client servi en statique ou séparé).
+- **CI/CD** : jobs distincts pour `client` (lint/build) et `server` (build/tests/Flyway).
+
+---
 
 ## 8. Concepts transversaux
-- Patrons client-serveur, MVC, DAO
-- Persistance, base de données relationelle, NoSQL
 
-## 9. Décisions d'architecture
-Veuillez consulter le fichier `/docs/adr/adr001.md`.
+- **API REST** versionnée (`/api/v1`) ; **DTO** d’entrée/sortie ; **validation `@Valid`**.
+- **Sécurité** : sessions cookies HttpOnly (`SameSite`), **A2F TOTP** (QR + codes de secours).
+- **Idempotence** : `clientOrderId` unique (contrainte DB) pour `POST /orders`.
+- **Caching** : Redis lecture (TTL court, invalidation sur exécutions).
+- **Persistance** : JPA **Repository** pour CRUD ; **DAO (JdbcTemplate)** ciblés pour requêtes/rapports complexes.
+- **Migrations** : **Flyway** (`V1__init.sql`, …).
+- **Observabilité (Sprint 2)** : logs avec `traceId` (MDC), **Actuator** (`/health`, `/metrics`), métriques Micrometer.
+
+---
+
+## 9. Décisions d’architecture
+
+- **ADR-001** — *Monolithe modulaire (service-based interne) au lieu de microservices* : simplicité, vélocité, moins de complexité ops.
+- **ADR-002** — *API REST + DTO vs entités exposées* : contrat stable, sécurité, payloads minces.
+- **ADR-003** — *PostgreSQL vs NoSQL pour cœur métier* : ACID, intégrité, requêtes/agrégations fiables.
+- **ADR-004** — *Idempotence par `clientOrderId` (contrainte unique)* : robustesse sous retry.
+- **ADR-005** — *Cache lecture (Redis) + invalidation ciblée* : latence faible, charge DB réduite.
+- **ADR-006** — *(À venir Sprint 2)* *Logs structurés + traceId + Actuator*.
+
+> Les fichiers ADR seront placés sous `/docs/adr/adrXXX.md`.
+
+---
 
 ## 10. Exigences qualité
 
 ### Maintenabilité
-- Séparation claire des responsabilités via MVC+DAO
-- Conventions de nommage cohérentes à travers toutes les couches
+- **Service-based interne** : components isolés, ownership clair des tables.
+- **Couches** : Controller → Service → Repository/DAO ; mapping **Entité ↔ DTO**.
 
 ### Flexibilité
-- Facile d'échanger entre implémentations MySQL et MongoDB
-- Extensible pour des types d'entités additionnels (démontré avec Users et Products)
+- **Ports**/interfaces entre components ; remplacement aisé d’adapters (ex. “bourse simulée”).
+- **DTO** versionnés ; ajout d’endpoints sans casser les existants.
 
-### Évolutivité
-- L'application peut avoir plusieurs clients connectés à un serveur
-- L'application peut également avoir plusieurs serveurs, même s'ils ne partagent pas les mêmes données
+### Évolutivité (scalabilité)
+- **Débit** : pagination, index, HikariCP ; **Resilience4j** (rate-limit, timeouts).
+- **Latence** : cache lecture, DTO minces, pré-agrégations, HTTP/2.
+
+### Sécurité
+- Sessions **HttpOnly**, **MFA TOTP** (activation + vérification), RBAC simple.
+- **Audit** des actions sensibles (login, ordres, réglages).
+
+---
 
 ## 11. Risques et dettes techniques
-Non applicable pour cette application.
+
+| Risque | Impact | Mitigation |
+|---|---|---|
+| Cache incohérent (staleness) | Données affichées périmées | TTL court + **invalidation** à l’arrivée d’exécutions |
+| Couplage entre components | Difficulté de refactor | **Ports** explicites, interdiction d’accès cross-repo |
+| SQL sous-optimal | Latence/débit dégradés | **Index** clés, profiling, DAO dédiés pour requêtes lourdes |
+| Observabilité tardive | Debug difficile | MVP logging (traceId) en Sprint 1, Actuator en Sprint 2 |
+
+---
 
 ## 12. Glossaire
 
 | Terme | Définition |
-|-------|------------|
-| **BD** | Base de données |
-| **CLI** | Command-line interface : application d'interface de ligne de commande |
-| **DAO** | Data Access Object : abstrait les opérations de base de données |
-| **MVC** | Model-View-Controller : patron architectural |
-| **NoSQL** | Not only SQL : désigne une famille de systèmes de gestion de base de données qui s'écarte du paradigme classique des bases relationnelles |
+|---|---|
+| **DTO** | *Data Transfer Object* : objet d’échange API (entrée/sortie), sans logique métier |
+| **DAO** | *Data Access Object* : encapsulation de l’accès DB (SQL), complémentaire aux Repository |
+| **A2F / MFA TOTP** | Authentification à 2 facteurs par code temporel (RFC 6238) |
+| **EOD** | *End Of Day* : clôture journalière (snapshots, rapports) |
+| **Idempotence** | Même requête répétée ⇒ même effet ; ici via `clientOrderId` unique |
+| **Service-based (interne)** | Découpage en services **logiques** dans un **monolithe** (appels en mémoire) |
