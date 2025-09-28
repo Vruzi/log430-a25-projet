@@ -21,11 +21,12 @@ public class ExempleBDController {
     public List<User> getUsers() {
         return userRepository.findAll();
     }
-
+/*
     @PostMapping("/user")
     public User createUser(@RequestBody CreateUserRequest req) {
         String hash = "{noop}" + req.password;
         User user = new User(req.username, req.email, hash);
         return userRepository.save(user);
     }
+*/
 }
