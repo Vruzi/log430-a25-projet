@@ -30,7 +30,6 @@ public class UserController {
     @PostMapping("/user")
     public ResponseEntity<?> createUser(@Validated @RequestBody CreateUserRequest req) {
         try {
-            // Vérifie si l'utilisateur existe déjà
             if (userRepository.existsByEmail(req.getEmail())) {
                 return ResponseEntity.badRequest()
                     .body(new ErrorResponse("Un utilisateur avec cet email existe déjà"));
